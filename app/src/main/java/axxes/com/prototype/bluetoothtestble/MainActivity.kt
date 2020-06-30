@@ -178,17 +178,9 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
 
     private fun connectBLE(device: BluetoothDevice?) {
         if (device == null) {
-            //showLog("Erreur, aucun objet bluetoothdevice présent")
             return
         }
         bluetoothGatt = device.connectGatt(this, true, bluetoothGattCallback)
-        /*showLog("Lancement connexion au device ${bluetoothDevice?.type}\n" +
-                "Nom : ${bluetoothDevice?.name}\n" +
-                "Adresse : ${bluetoothDevice?.address}\n" +
-                "ClassJava : ${bluetoothDevice?.javaClass}\n" +
-                "Bluetooth class ${bluetoothDevice?.bluetoothClass}\n" +
-                "Bond State : ${bluetoothDevice?.bondState}\n" +
-                "UUID ${bluetoothDevice?.uuids?.get(0).toString()}\n")*/
     }
 
     private fun discoverServices() {
@@ -207,22 +199,32 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         gatt.setCharacteristicNotification(characteristic, enabled)
     }
 
+    private fun preparePacketGNSS(_timestamp: Long, _longitude: Int, _latitude: Int, _hdop: Int, _numberOfSattelites: Int): ByteArray{
+        val ret: ByteArray
+        val listTmp = mutableListOf<Byte>()
+
+        listTmp.addAll(Parameter.toBytes(_timestamp,4))
+        listTmp.addAll(Parameter.toBytes(_longitude,4))
+        listTmp.addAll(Parameter.toBytes(_latitude,4))
+
+        listTmp.addAll(Parameter.toBytes(_hdop,1))
+        listTmp.addAll(Parameter.toBytes(_numberOfSattelites,1))
+        ret = listTmp.toByteArray()
+
+        return ret
+    }
+
     private fun requestingFastConnection(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic){
         //myCommand = Command(CommandDsrc2.CONTROL_BLE_FAST_CONNECTION,null)
         //myCommand = Command(CommandDsrc2.OPERATION_GET_ATTR, listOf(0, 1, 16))
-        val list = mutableListOf<Byte>()
-        list.addAll(listOf(0x02,0x03,0x21,0x00,0x00,0x0f,0x02,0x02,50))
-        val timeStamp = System.currentTimeMillis()
-        list.addAll(Parameter.toBytes(timeStamp,4))
-        val longitude = 47258182
-        list.addAll(Parameter.toBytes(longitude,4))
-        val latitude = 6043662
-        list.addAll(Parameter.toBytes(latitude,4))
-        list.addAll(Parameter.toBytes(12.075.toInt(),1))
-        list.addAll(Parameter.toBytes(12.075.toInt(),1))
 
-        //characteristic.value = myCommand.request
-        characteristic.value = list.toByteArray()
+        val latitude = 6043662
+        val longitude = 47258182
+        val timeStamp: Long = System.currentTimeMillis()
+        val packetGNSS = preparePacketGNSS(timeStamp,longitude,latitude,12,4)
+
+        myCommand = Command(CommandDsrc2.OPERATION_SET_ATTR, listOf(2,2,50,23))
+        characteristic.value = myCommand.request
         gatt.writeCharacteristic(characteristic)
     }
 
@@ -341,6 +343,9 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
     }
 
     override fun onItemClick(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-        connectBLE(set_pairedDevices[position])
+        val intent = Intent(this,DeviceActivity::class.java)
+        intent.putExtra(DeviceActivity.EXTRA_DEVICE,set_pairedDevices[position])
+        startActivity(intent)
+        finish()
     }
 }
