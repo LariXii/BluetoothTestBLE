@@ -1,25 +1,22 @@
 package axxes.com.prototype.bluetoothtestble
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.bluetooth.*
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Message
-import android.os.PersistableBundle
 import android.text.method.ScrollingMovementMethod
-import android.util.Log
-import android.view.MotionEvent
-import android.view.View
-import android.widget.AdapterView
 import androidx.appcompat.app.AppCompatActivity
-import axxes.com.prototype.bluetoothtestble.model.v2.Command
-import axxes.com.prototype.bluetoothtestble.model.v2.Parameter
-import axxes.com.prototype.bluetoothtestble.parameters.CommandDsrc2
 import com.example.android.whileinuselocation.manager.DSRCAttributManager
 import com.example.android.whileinuselocation.manager.DSRCManager
 import kotlinx.android.synthetic.main.activity_device.*
-import kotlinx.android.synthetic.main.activity_main.*
+
 
 class DeviceActivity: AppCompatActivity() {
 
@@ -27,6 +24,8 @@ class DeviceActivity: AppCompatActivity() {
 
     var bluetoothDevice: BluetoothDevice? = null
     var bluetoothGatt: BluetoothGatt? = null
+    var bluetoothAdapter : BluetoothAdapter? = null
+    var bluetoothManager : BluetoothManager? = null
 
     var requestCharacteristic: BluetoothGattCharacteristic? = null
     var responseCharacteristic: BluetoothGattCharacteristic? = null
@@ -36,7 +35,11 @@ class DeviceActivity: AppCompatActivity() {
     val STATE_DISCONNECTED = 1
     val STATE_SENDABLE = 2
     val STATE_NOT_SENDABLE = 3
-    val handlerGattState: Handler = @SuppressLint("HandlerLeak")
+
+    var stateGatt = STATE_DISCONNECTED
+
+    @SuppressLint("HandlerLeak")
+    val handlerGattState: Handler =
     object: Handler(){
         override fun handleMessage(msg: Message) {
             super.handleMessage(msg)
@@ -45,11 +48,13 @@ class DeviceActivity: AppCompatActivity() {
                     btn_send.isEnabled = true
                     textView_state.text = "Connected"
                     textView_state.setTextColor(Color.GREEN)
+                    btn_disconnect.text = "Déconnexion"
                 }
                 STATE_DISCONNECTED -> {
                     btn_send.isEnabled = false
                     textView_state.text = "Disconnected"
                     textView_state.setTextColor(Color.RED)
+                    btn_disconnect.text = "Connexion"
                 }
                 STATE_SENDABLE -> {
                     btn_send.isEnabled = true
@@ -61,9 +66,34 @@ class DeviceActivity: AppCompatActivity() {
         }
     }
 
+    private val broadCastBluetooth: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+            if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(
+                    BluetoothAdapter.EXTRA_STATE,
+                    BluetoothAdapter.ERROR
+                )
+                when (state) {
+                    BluetoothAdapter.STATE_OFF -> {
+                        askToEnabledBT()
+                    }
+                    BluetoothAdapter.STATE_ON -> {
+                        // TODO reconnect to BDO
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
+
+        bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
+        bluetoothAdapter = bluetoothManager?.adapter
+
+        registerReceiver(broadCastBluetooth, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
         bluetoothDevice = intent.getParcelableExtra<BluetoothDevice>(EXTRA_DEVICE)
         connectBLE(bluetoothDevice)
@@ -75,11 +105,49 @@ class DeviceActivity: AppCompatActivity() {
         }
 
         btn_disconnect.setOnClickListener {
-            disconnectBLE()
+            when(stateGatt){
+                STATE_CONNECTED -> {
+                    disconnectBLE()
+                }
+                STATE_DISCONNECTED -> {
+                    // Clear previous connection
+                    disconnectBLE()
+                    closeBLE()
+                    // Then connect
+                    connectBLE(bluetoothDevice)
+                }
+            }
+        }
+
+        btn_exit.setOnClickListener {
+            closeBLE()
             finish()
         }
 
         textView_log.movementMethod = ScrollingMovementMethod()
+    }
+
+    private fun askToEnabledBT(){
+        val intentEnabledBluetooth = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        startActivityForResult(intentEnabledBluetooth,
+            PERMISSION_BLUETOOTH_REQUEST_CODE
+        )
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        when(requestCode){
+            PERMISSION_BLUETOOTH_REQUEST_CODE -> {
+                when(resultCode){
+                    Activity.RESULT_OK -> {
+
+                    }
+                    Activity.RESULT_CANCELED -> {
+
+                    }
+                }
+            }
+        }
     }
 
     private fun connectBLE(device: BluetoothDevice?) {
@@ -87,9 +155,15 @@ class DeviceActivity: AppCompatActivity() {
             return
         }
         bluetoothGatt = device.connectGatt(this, true, bluetoothGattCallback)
+        stateGatt = STATE_CONNECTED
     }
 
     private fun disconnectBLE(){
+        bluetoothGatt?.disconnect()
+        stateGatt = STATE_DISCONNECTED
+    }
+
+    private fun closeBLE(){
         bluetoothGatt?.close()
         bluetoothGatt = null
     }
@@ -131,7 +205,7 @@ class DeviceActivity: AppCompatActivity() {
     private var bluetoothGattCallback: BluetoothGattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             super.onConnectionStateChange(gatt, status, newState)
-            //showLog("\nLe statut de connexion du device a été modifié : $status")
+            showLog("\nLe statut de connexion du pont a été modifié : $status\nNouveau status de connexion du device: $newState")
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     handlerGattState.obtainMessage(STATE_CONNECTED).sendToTarget()
@@ -139,7 +213,7 @@ class DeviceActivity: AppCompatActivity() {
                     textView_name.text = bluetoothDevice?.name
                     discoverServices()
                 }
-                if(newState == BluetoothProfile.STATE_CONNECTED){
+                if(newState == BluetoothProfile.STATE_DISCONNECTED){
                     handlerGattState.obtainMessage(STATE_DISCONNECTED).sendToTarget()
                 }
             }
@@ -214,5 +288,6 @@ class DeviceActivity: AppCompatActivity() {
     companion object{
         const val TAG = "DeviceActivity "
         const val EXTRA_DEVICE = "myExtra.DEVICE"
+        const val PERMISSION_BLUETOOTH_REQUEST_CODE = 102
     }
 }

@@ -2,6 +2,7 @@ package axxes.com.prototype.bluetoothtestble
 
 import android.Manifest
 import android.annotation.TargetApi
+import android.app.Activity
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.Context
@@ -45,6 +46,11 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
         bluetoothAdapter = bluetoothManager?.adapter
 
+        if(!bluetoothAdapter?.isEnabled!!){
+            val intentEnabledBluetooth = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            startActivityForResult(intentEnabledBluetooth, PERMISSION_BLUETOOTH_REQUEST_CODE)
+        }
+
         if (!locationPermissionApproved()) {
             if(Build.VERSION.SDK_INT > 22){
                 requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), PERMISSION_REQUEST_CODE)
@@ -79,15 +85,46 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         )
     }
 
+    private fun bluetoothPermissionApproved(): Boolean {
+        return PackageManager.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(
+            this,
+            Manifest.permission.BLUETOOTH
+        )
+    }
+
+    private fun bluetoothAdminPermissionApproved(): Boolean {
+        return PackageManager.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(
+            this,
+            Manifest.permission.BLUETOOTH_ADMIN
+        )
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         if (requestCode != PERMISSION_REQUEST_CODE) return
         var idxPermFine = -1
         var i = 0
         while (i < permissions.size && idxPermFine == -1) {
-            if (permissions[i] == Manifest.permission.ACCESS_FINE_LOCATION) idxPermFine = i
+            if (permissions[i] == Manifest.permission.ACCESS_FINE_LOCATION)
+                idxPermFine = i
             i++
         }
         if (grantResults[idxPermFine] == PackageManager.PERMISSION_GRANTED) initScan()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        when(resultCode){
+            PERMISSION_BLUETOOTH_REQUEST_CODE -> {
+                when(resultCode){
+                    Activity.RESULT_OK -> {
+
+                    }
+                    Activity.RESULT_CANCELED -> {
+
+                    }
+                }
+            }
+        }
     }
 
     private fun initScan() {
@@ -176,149 +213,6 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         adapter_paired_devices.notifyDataSetChanged()
     }
 
-    private fun connectBLE(device: BluetoothDevice?) {
-        if (device == null) {
-            return
-        }
-        bluetoothGatt = device.connectGatt(this, true, bluetoothGattCallback)
-    }
-
-    private fun discoverServices() {
-        if (bluetoothGatt == null) {
-            //showLog("Erreur, l'objet BluetoothGatt est null")
-            return
-        }
-        bluetoothGatt!!.discoverServices()
-    }
-
-    private fun enabledGattNotification(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic){
-        val enabled = true
-        val descriptor = characteristic.getDescriptor(characteristic.descriptors[0].uuid)
-        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        //gatt.writeDescriptor(descriptor)
-        gatt.setCharacteristicNotification(characteristic, enabled)
-    }
-
-    private fun preparePacketGNSS(_timestamp: Long, _longitude: Int, _latitude: Int, _hdop: Int, _numberOfSattelites: Int): ByteArray{
-        val ret: ByteArray
-        val listTmp = mutableListOf<Byte>()
-
-        listTmp.addAll(Parameter.toBytes(_timestamp,4))
-        listTmp.addAll(Parameter.toBytes(_longitude,4))
-        listTmp.addAll(Parameter.toBytes(_latitude,4))
-
-        listTmp.addAll(Parameter.toBytes(_hdop,1))
-        listTmp.addAll(Parameter.toBytes(_numberOfSattelites,1))
-        ret = listTmp.toByteArray()
-
-        return ret
-    }
-
-    private fun requestingFastConnection(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic){
-        //myCommand = Command(CommandDsrc2.CONTROL_BLE_FAST_CONNECTION,null)
-        //myCommand = Command(CommandDsrc2.OPERATION_GET_ATTR, listOf(0, 1, 16))
-
-        val latitude = 6043662
-        val longitude = 47258182
-        val timeStamp: Long = System.currentTimeMillis()
-        val packetGNSS = preparePacketGNSS(timeStamp,longitude,latitude,12,4)
-
-        myCommand = Command(CommandDsrc2.OPERATION_SET_ATTR, listOf(2,2,50,23))
-        characteristic.value = myCommand.request
-        gatt.writeCharacteristic(characteristic)
-    }
-
-    private var bluetoothGattCallback: BluetoothGattCallback = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            super.onConnectionStateChange(gatt, status, newState)
-            //showLog("\nLe statut de connexion du device a été modifié : $status")
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    bluetoothDevice = gatt.device
-                    showLog("Le device suivant est connecté :" + gatt.device.address)
-                    showLog("Nom : ${bluetoothDevice?.name}\n" +
-                            "Adresse : ${bluetoothDevice?.address}\n" +
-                            "ClassJava : ${bluetoothDevice?.javaClass}\n" +
-                            "Bluetooth class ${bluetoothDevice?.bluetoothClass}\n" +
-                            "Bond State : ${bluetoothDevice?.bondState}\n" +
-                            "UUID ${bluetoothDevice?.uuids?.get(0).toString()}\n")
-                    discoverServices()
-                    deviceDetected = true
-                }
-            }
-        }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            super.onServicesDiscovered(gatt, status)
-            showLog("Des services ont été découverts")
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                var charac_command: BluetoothGattCharacteristic? = null
-                var charac_response: BluetoothGattCharacteristic? = null
-                var charac_event: BluetoothGattCharacteristic? = null
-                gatt.services.forEach{  gattService ->
-                    //if(ServiceDsrcUtils.isKnowing(gattService.uuid.toString()))
-                        //Log.d(TAG,"Service : ${gattService.uuid}")
-                    gattService.characteristics.forEach { gattCharacteristic ->
-                        if(ServiceDsrcUtils.isKnowing(gattCharacteristic.uuid.toString())){
-                            //Log.d(TAG,"Characteristic : ${gattCharacteristic.uuid}\nPermissions : ${gattCharacteristic.permissions}\nProperties : ${gattCharacteristic.properties}")
-                            when(gattCharacteristic.uuid.toString()){
-                                ServiceDsrcUtils.COMMAND -> {
-                                    charac_command = gattCharacteristic
-                                }
-                                ServiceDsrcUtils.RESPONSE -> {
-                                    charac_response = gattCharacteristic
-                                }
-                                ServiceDsrcUtils.EVENT -> {
-                                    charac_event = gattCharacteristic
-                                }
-                            }
-                        }
-                    }
-                }
-                enabledGattNotification(gatt,charac_response!!)
-                requestingFastConnection(gatt, charac_command!!)
-            }
-        }
-
-        override fun onCharacteristicWrite(
-            gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?,
-            status: Int
-        ) {
-            super.onCharacteristicWrite(gatt, characteristic, status)
-            if (characteristic != null) {
-                //Log.d(TAG,myCommand.printRequest())
-            }
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?,
-            status: Int
-        ) {
-            super.onCharacteristicRead(gatt, characteristic, status)
-            if(characteristic != null){
-
-            }
-        }
-
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?
-        ) {
-            super.onCharacteristicChanged(gatt, characteristic)
-            if(characteristic != null){
-                //myCommand.receiveResponse(characteristic.value)
-                //Log.d(TAG,myCommand.printResponse())
-                var ret = ""
-                for(b in characteristic.value){
-                    ret += "%02x".format(b) + " "
-                }
-                Log.d(TAG,"Reçu : $ret")
-            }
-        }
-    }
-
     private fun showLog(message: String) {
         txt_log.append("$message\n")
     }
@@ -326,20 +220,7 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
     companion object {
         const val TAG = "BLE SCANNING"
         const val PERMISSION_REQUEST_CODE = 101
-
-        const val OK = 0x00 //Command was successfully executed
-        const val ALREADY = 0x01 //Operation not performed because system was already in commanded state
-        const val BUSY = 0x10 //System is busy and cannot process or evaluate the command
-        const val DENIED = 0x20 //Command cannot be executed because configuration or other state that must be resolved by host system
-        const val ACCESS_DENIED = 0x21 //Not allowed to access this information
-        const val BLOCKED = 0x22 //Command cannot be executed because of transient state [is this really different from busy?]
-        const val NOT_IMPLEMENTED = 0x28 //Command cannot be executed because it has not been implemented
-        const val ILLEGAL_VALUE = 0x30 //Illegal parameter value (e.g. outside range)
-        const val INCONSISTENT_VALUE = 0x31 //Parameter value is inconsistent with other parameter values or configured
-        const val SECURITY = 0x40 //Command cannot be executed due to security restrictions
-        const val MEMORY_FULL = 0x50 //Command cannot be executed because memory is full
-        const val HARDWARE_ERROR = 0x80 //Command cannot be executed because of permanent memory error
-
+        const val PERMISSION_BLUETOOTH_REQUEST_CODE = 102
     }
 
     override fun onItemClick(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
