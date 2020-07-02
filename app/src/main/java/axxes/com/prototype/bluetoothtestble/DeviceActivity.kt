@@ -12,9 +12,11 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Message
 import android.text.method.ScrollingMovementMethod
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.example.android.whileinuselocation.manager.DSRCAttributManager
 import com.example.android.whileinuselocation.manager.DSRCManager
+import com.example.android.whileinuselocation.model.DSRCAttribut
 import kotlinx.android.synthetic.main.activity_device.*
 
 
@@ -38,8 +40,10 @@ class DeviceActivity: AppCompatActivity() {
 
     var stateGatt = STATE_DISCONNECTED
 
+    var responseParameters: List<Pair<String, Int>>? = null
+
     @SuppressLint("HandlerLeak")
-    val handlerGattState: Handler =
+    private val handlerGattState: Handler =
     object: Handler(){
         override fun handleMessage(msg: Message) {
             super.handleMessage(msg)
@@ -58,9 +62,15 @@ class DeviceActivity: AppCompatActivity() {
                 }
                 STATE_SENDABLE -> {
                     btn_send.isEnabled = true
+                    btn_get_attr.isEnabled = true
+                    editText_EID.isEnabled = true
+                    editText_attrID.isEnabled = true
                 }
                 STATE_NOT_SENDABLE -> {
                     btn_send.isEnabled = false
+                    btn_get_attr.isEnabled = false
+                    editText_EID.isEnabled = false
+                    editText_attrID.isEnabled = false
                 }
             }
         }
@@ -86,6 +96,13 @@ class DeviceActivity: AppCompatActivity() {
         }
     }
 
+    val SEND = 0
+    val RECEIVE = 1
+    val END = 2
+
+    // Handler used to do specific action in fact with packet sended to bdo
+    private var handleResponse: Handler? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
@@ -101,7 +118,31 @@ class DeviceActivity: AppCompatActivity() {
         btn_send.isEnabled = false
 
         btn_send.setOnClickListener {
-            sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!)
+            val packet = getPacketSetGNSSAttribut()
+            sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!,packet)
+            responseParameters = dsrcManager.readGNSSPacket()
+        }
+
+        btn_get_attr.setOnClickListener {
+            val eid: Int = editText_EID.text.toString().toInt()
+            val attrId: Int = editText_attrID.text.toString().toInt()
+            val attribut = DSRCAttributManager.finAttribut(eid,attrId)
+            if(attribut == null){
+                btn_get_attr.setTextColor(Color.RED)
+                Handler().postDelayed({
+                    btn_get_attr.setTextColor(Color.BLACK)
+                }, 2000)
+            }
+            else{
+                btn_get_attr.setTextColor(Color.BLACK)
+                val packet = getPacketGetAttribut(attribut)
+                sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!,packet)
+                responseParameters = dsrcManager.readGetAttributPacket(attribut)
+            }
+        }
+
+        btn_test.setOnClickListener {
+            getMenuAttribut()
         }
 
         btn_disconnect.setOnClickListener {
@@ -125,6 +166,11 @@ class DeviceActivity: AppCompatActivity() {
         }
 
         textView_log.movementMethod = ScrollingMovementMethod()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(broadCastBluetooth)
     }
 
     private fun askToEnabledBT(){
@@ -170,7 +216,6 @@ class DeviceActivity: AppCompatActivity() {
 
     private fun discoverServices() {
         if (bluetoothGatt == null) {
-            //showLog("Erreur, l'objet BluetoothGatt est null")
             return
         }
         bluetoothGatt!!.discoverServices()
@@ -184,8 +229,11 @@ class DeviceActivity: AppCompatActivity() {
         gatt.setCharacteristicNotification(characteristic, enabled)
     }
 
-    private fun sendPacketToBDO(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic){
+    private fun getPacketGetAttribut(attributes: DSRCAttribut): ByteArray{
+        return dsrcManager.prepareReadCommandPacket(attributes, false)
+    }
 
+    private fun getPacketSetGNSSAttribut(): ByteArray{
         val latitude = 6043662
         val longitude = 47258182
         val timeStamp: Long = System.currentTimeMillis()
@@ -193,13 +241,82 @@ class DeviceActivity: AppCompatActivity() {
         val gnssData = dsrcManager.prepareGNSSPacket(timeStamp,longitude,latitude,12,4)
 
         val attribut = DSRCAttributManager.finAttribut(2,50)
-        val dataToSend = dsrcManager.prepareWriteCommandPacket(attribut!!,gnssData,
+
+        return dsrcManager.prepareWriteCommandPacket(attribut!!,gnssData,
             autoFillWithZero = true,
             temporaryData = true
         )
+    }
 
-        characteristic.value = dataToSend
+    private fun sendPacketToBDO(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, packet: ByteArray){
+        characteristic.value = packet
         gatt.writeCharacteristic(characteristic)
+    }
+
+    private fun getMenuAttribut(){
+        // Store all packets to send
+        val queueRequest: MutableList<Pair<DSRCAttribut,ByteArray>> = mutableListOf()
+        // Store all packets receive
+        val queueResponse: MutableList<ByteArray> = mutableListOf()
+        // Store all attributes to get
+        val listAttribut: MutableList<DSRCAttribut> = mutableListOf()
+        var attribut = DSRCAttributManager.finAttribut(1, 4)
+        attribut?.let{listAttribut.add(it)}
+        attribut = DSRCAttributManager.finAttribut(1, 19)
+        attribut?.let{listAttribut.add(it)}
+        attribut = DSRCAttributManager.finAttribut(1, 24)
+        attribut?.let{listAttribut.add(it)}
+
+        Log.d(TAG,"Liste des attributs : $listAttribut")
+
+        val handler = @SuppressLint("HandlerLeak")
+        object: Handler(){
+            override fun handleMessage(msg: Message) {
+                super.handleMessage(msg)
+                var packetResponse: ByteArray? = null
+                if(msg.obj != null) {
+                    packetResponse = msg.obj as ByteArray
+                }
+
+                when(msg.what){
+                    SEND -> {
+
+                    }
+                    RECEIVE -> {
+                        // Add response
+                        packetResponse?.let { queueResponse.add(it) }
+                        // Remove first request packet added
+                        val p = queueRequest.removeAt(0)
+                        Log.d(TAG,"Suppression et lecture de l'attribut ${p.first.attrName}")
+
+                        packetResponse?.let { showLog(dsrcManager.readResponse(responseParameters!!,it)) }
+
+                        if(queueRequest.isNotEmpty()){
+                            Log.d(TAG,"Envoie de l'attribut ${queueRequest[0].first.attrName}")
+                            sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!,queueRequest[0].second)
+                            responseParameters = dsrcManager.readGetAttributPacket(queueRequest[0].first)
+                        }
+                        else{
+                            obtainMessage(END).sendToTarget()
+                        }
+                    }
+                    END -> {
+                        // TODO change var ect with queueReponse
+                        handleResponse = null
+                    }
+                }
+            }
+        }
+        // TODO add all packet to queueRequest
+        handleResponse = handler
+
+        for(attr in listAttribut){
+            queueRequest.add(Pair(attr,getPacketGetAttribut(attr)))
+        }
+
+        Log.d(TAG,"Envoie de l'attribut ${queueRequest[0].first.attrName}")
+        sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!,queueRequest[0].second)
+        responseParameters = dsrcManager.readGetAttributPacket(queueRequest[0].first)
     }
 
     private var bluetoothGattCallback: BluetoothGattCallback = object : BluetoothGattCallback() {
@@ -276,7 +393,14 @@ class DeviceActivity: AppCompatActivity() {
         ) {
             super.onCharacteristicChanged(gatt, characteristic)
             if(characteristic != null){
-                showLog(dsrcManager.readGNSSPacket(characteristic.value))
+
+                if(handleResponse != null){
+                    handleResponse!!.obtainMessage(RECEIVE,characteristic.value).sendToTarget()
+                }
+                else{
+                    showLog(dsrcManager.readResponse(responseParameters!!,characteristic.value))
+                    responseParameters = null
+                }
             }
         }
     }

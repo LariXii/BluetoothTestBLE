@@ -6,6 +6,21 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <EditText
+        android:id="@+id/editText_attrID"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginBottom="34dp"
+        android:ems="10"
+        android:hint="ID"
+        android:inputType="numberSigned"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.239"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.216" />
+
     <TextView
         android:id="@+id/textView_name"
         android:layout_width="101dp"
@@ -29,7 +44,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView_state"
-        app:layout_constraintVertical_bias="0.319" />
+        app:layout_constraintVertical_bias="0.37" />
 
     <TextView
         android:id="@+id/textView_state"
@@ -44,15 +59,15 @@
 
     <Button
         android:id="@+id/btn_send"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="98dp"
+        android:layout_height="75dp"
         android:text="@string/btn_send"
         app:layout_constraintBottom_toTopOf="@+id/textView_log"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.497"
+        app:layout_constraintHorizontal_bias="0.916"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textView_state"
-        app:layout_constraintVertical_bias="0.921" />
+        app:layout_constraintVertical_bias="0.64" />
 
     <Button
         android:id="@+id/btn_disconnect"
@@ -80,4 +95,44 @@
         app:layout_constraintStart_toEndOf="@+id/btn_disconnect"
         app:layout_constraintTop_toBottomOf="@+id/textView_log"
         app:layout_constraintVertical_bias="0.0" />
+
+    <EditText
+        android:id="@+id/editText_EID"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginBottom="34dp"
+        android:ems="10"
+        android:hint="EID"
+        android:inputType="numberSigned"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.094"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.216" />
+
+    <Button
+        android:id="@+id/btn_get_attr"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/btn_get_attr"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.498"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.196" />
+
+    <Button
+        android:id="@+id/btn_test"
+        android:layout_width="30dp"
+        android:layout_height="31dp"
+        android:text="Button"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.154"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.088" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

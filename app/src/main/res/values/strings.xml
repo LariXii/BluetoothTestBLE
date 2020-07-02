@@ -2,4 +2,5 @@
     <string name="app_name">BluetoothTestBLE</string>
     <string name="btn_send">Envoyer une position</string>
     <string name="btn_disconnect">Déconnexion</string>
+    <string name="btn_get_attr">Get attribute</string>
 </resources>
