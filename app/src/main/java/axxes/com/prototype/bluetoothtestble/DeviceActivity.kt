@@ -406,7 +406,7 @@ class DeviceActivity: AppCompatActivity() {
     }
 
     private fun showLog(message: String) {
-        textView_log.append("$message\n")
+        textView_log.text = message
     }
 
     companion object{
