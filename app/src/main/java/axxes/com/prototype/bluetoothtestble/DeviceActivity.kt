@@ -289,7 +289,11 @@ class DeviceActivity: AppCompatActivity() {
                         val p = queueRequest.removeAt(0)
                         Log.d(TAG,"Suppression et lecture de l'attribut ${p.first.attrName}")
 
-                        packetResponse?.let { showLog(dsrcManager.readResponse(responseParameters!!,it)) }
+                        packetResponse?.let {
+                            showLog(dsrcManager.readResponse(responseParameters!!,it))
+                            Log.d(TAG,dsrcManager.readResponse(responseParameters!!,it))
+                        }
+
 
                         if(queueRequest.isNotEmpty()){
                             Log.d(TAG,"Envoie de l'attribut ${queueRequest[0].first.attrName}")
@@ -400,6 +404,7 @@ class DeviceActivity: AppCompatActivity() {
                 else{
                     showLog(dsrcManager.readResponse(responseParameters!!,characteristic.value))
                     responseParameters = null
+                    Log.d(TAG,dsrcManager.readResponse(responseParameters!!,characteristic.value))
                 }
             }
         }
