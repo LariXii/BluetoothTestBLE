@@ -112,7 +112,7 @@ class DeviceActivity: AppCompatActivity() {
 
         registerReceiver(broadCastBluetooth, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
-        bluetoothDevice = intent.getParcelableExtra<BluetoothDevice>(EXTRA_DEVICE)
+        bluetoothDevice = intent.getParcelableExtra(EXTRA_DEVICE)
         connectBLE(bluetoothDevice)
 
         btn_send.isEnabled = false
