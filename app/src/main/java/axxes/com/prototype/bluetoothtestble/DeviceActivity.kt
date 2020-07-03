@@ -471,10 +471,10 @@ class DeviceActivity: AppCompatActivity() {
 
     companion object{
         private const val TAG = "DeviceActivity "
-        private const val EXTRA_DEVICE = "myExtra.DEVICE"
+        const val EXTRA_DEVICE = "myExtra.DEVICE"
         private const val PERMISSION_BLUETOOTH_REQUEST_CODE = 102
 
         private const val NOTIFICATION_BLUETOOTH_ID = 87654321
-        private private const val NOTIFICATION_CHANNEL_BLUETOOTH_ID = "test_bluetooth_ble_01"
+        private const val NOTIFICATION_CHANNEL_BLUETOOTH_ID = "test_bluetooth_ble_01"
     }
 }
