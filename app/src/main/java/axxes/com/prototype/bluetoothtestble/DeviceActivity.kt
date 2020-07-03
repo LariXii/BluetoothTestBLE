@@ -2,18 +2,22 @@ package axxes.com.prototype.bluetoothtestble
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.bluetooth.*
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Message
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
 import com.example.android.whileinuselocation.manager.DSRCAttributManager
 import com.example.android.whileinuselocation.manager.DSRCManager
 import com.example.android.whileinuselocation.model.DSRCAttribut
@@ -26,8 +30,9 @@ class DeviceActivity: AppCompatActivity() {
 
     var bluetoothDevice: BluetoothDevice? = null
     var bluetoothGatt: BluetoothGatt? = null
-    var bluetoothAdapter : BluetoothAdapter? = null
-    var bluetoothManager : BluetoothManager? = null
+    lateinit var bluetoothAdapter : BluetoothAdapter
+    lateinit var bluetoothManager : BluetoothManager
+    lateinit var notificationManager: NotificationManager
 
     var requestCharacteristic: BluetoothGattCharacteristic? = null
     var responseCharacteristic: BluetoothGattCharacteristic? = null
@@ -38,7 +43,7 @@ class DeviceActivity: AppCompatActivity() {
     val STATE_SENDABLE = 2
     val STATE_NOT_SENDABLE = 3
 
-    var stateGatt = STATE_DISCONNECTED
+    var stateDevice = STATE_DISCONNECTED
 
     var responseParameters: List<Pair<String, Int>>? = null
 
@@ -90,6 +95,14 @@ class DeviceActivity: AppCompatActivity() {
                     }
                     BluetoothAdapter.STATE_ON -> {
                         // TODO reconnect to BDO
+                        Log.d(TAG,"Etat du device $stateDevice")
+                        if(stateDevice == STATE_DISCONNECTED){
+                            // Clear previous connection
+                            disconnectBLE()
+                            closeBLE()
+                            // Then connect
+                            connectBLE(bluetoothDevice)
+                        }
                     }
                 }
             }
@@ -107,8 +120,9 @@ class DeviceActivity: AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
 
-        bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
-        bluetoothAdapter = bluetoothManager?.adapter
+        bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        bluetoothAdapter = bluetoothManager.adapter
 
         registerReceiver(broadCastBluetooth, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
@@ -146,7 +160,7 @@ class DeviceActivity: AppCompatActivity() {
         }
 
         btn_disconnect.setOnClickListener {
-            when(stateGatt){
+            when(stateDevice){
                 STATE_CONNECTED -> {
                     disconnectBLE()
                 }
@@ -186,30 +200,65 @@ class DeviceActivity: AppCompatActivity() {
             PERMISSION_BLUETOOTH_REQUEST_CODE -> {
                 when(resultCode){
                     Activity.RESULT_OK -> {
-
+                        disconnectBLE()
+                        closeBLE()
+                        connectBLE(bluetoothDevice)
                     }
                     Activity.RESULT_CANCELED -> {
-
+                        disconnectBLE()
+                        closeBLE()
                     }
                 }
             }
         }
     }
 
+    private fun createNotificationBluetooth(): NotificationCompat.Builder {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
+            // Création du nouveau Channel de notification
+            val name = "BLUETOOTH_DESABLED"
+            val mChannel = NotificationChannel(
+                NOTIFICATION_CHANNEL_BLUETOOTH_ID,
+                name,
+                NotificationManager.IMPORTANCE_LOW
+            )
+
+            // Register the channel with the system; you can't change the importance
+            // or other notification behaviors after this
+            notificationManager.createNotificationChannel(mChannel)
+        }
+
+        val notificationCompatBuilder =
+            NotificationCompat.Builder(
+                applicationContext,
+                NOTIFICATION_CHANNEL_BLUETOOTH_ID
+            )
+        return notificationCompatBuilder
+            .setContentTitle("Information")
+            .setContentText("La connexion au BDO à échoué\nCliquez pour vous reconnecter")
+            .setOngoing(true)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+    }
+
     private fun connectBLE(device: BluetoothDevice?) {
+        Log.d(TAG,"onConnectBLE")
         if (device == null) {
             return
         }
         bluetoothGatt = device.connectGatt(this, true, bluetoothGattCallback)
-        stateGatt = STATE_CONNECTED
+        stateDevice = STATE_CONNECTED
     }
 
     private fun disconnectBLE(){
+        Log.d(TAG,"onDisconnectBLE")
         bluetoothGatt?.disconnect()
-        stateGatt = STATE_DISCONNECTED
+        stateDevice = STATE_DISCONNECTED
     }
 
     private fun closeBLE(){
+        Log.d(TAG,"onCloseBLE")
         bluetoothGatt?.close()
         bluetoothGatt = null
     }
@@ -338,6 +387,13 @@ class DeviceActivity: AppCompatActivity() {
                     handlerGattState.obtainMessage(STATE_DISCONNECTED).sendToTarget()
                 }
             }
+            else{
+                if (status == BluetoothGatt.GATT_FAILURE){
+                    showLog("Echec de la connexion avec le BDO...\nPlusieurs raisons peuvent en être les causes. Vérifiez que vous êtes assez proche du badge lors de la connexion.")
+                    val notificationBuilder = createNotificationBluetooth()
+                    notificationManager.notify(NOTIFICATION_BLUETOOTH_ID, notificationBuilder.build())
+                }
+            }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -404,7 +460,6 @@ class DeviceActivity: AppCompatActivity() {
                 else{
                     showLog(dsrcManager.readResponse(responseParameters!!,characteristic.value))
                     responseParameters = null
-                    Log.d(TAG,dsrcManager.readResponse(responseParameters!!,characteristic.value))
                 }
             }
         }
@@ -415,8 +470,11 @@ class DeviceActivity: AppCompatActivity() {
     }
 
     companion object{
-        const val TAG = "DeviceActivity "
-        const val EXTRA_DEVICE = "myExtra.DEVICE"
-        const val PERMISSION_BLUETOOTH_REQUEST_CODE = 102
+        private const val TAG = "DeviceActivity "
+        private const val EXTRA_DEVICE = "myExtra.DEVICE"
+        private const val PERMISSION_BLUETOOTH_REQUEST_CODE = 102
+
+        private const val NOTIFICATION_BLUETOOTH_ID = 87654321
+        private private const val NOTIFICATION_CHANNEL_BLUETOOTH_ID = "test_bluetooth_ble_01"
     }
 }
