@@ -66,16 +66,10 @@ class DeviceActivity: AppCompatActivity() {
                     btn_disconnect.text = "Connexion"
                 }
                 STATE_SENDABLE -> {
-                    btn_send.isEnabled = true
-                    btn_get_attr.isEnabled = true
-                    editText_EID.isEnabled = true
-                    editText_attrID.isEnabled = true
+                    enabledAll()
                 }
                 STATE_NOT_SENDABLE -> {
-                    btn_send.isEnabled = false
-                    btn_get_attr.isEnabled = false
-                    editText_EID.isEnabled = false
-                    editText_attrID.isEnabled = false
+                    disabledAll()
                 }
             }
         }
@@ -113,8 +107,27 @@ class DeviceActivity: AppCompatActivity() {
     val RECEIVE = 1
     val END = 2
 
+    @SuppressLint("HandlerLeak")
+    private val mainResponseHandler = object: Handler(){
+        override fun handleMessage(msg: Message) {
+            super.handleMessage(msg)
+            var packetResponse: ByteArray? = null
+            if(msg.obj != null) {
+                packetResponse = msg.obj as ByteArray
+            }
+            when(msg.what){
+                RECEIVE -> {
+                    packetResponse?.let{ showResponse(dsrcManager.readResponse(responseParameters!!,it)) }
+                    enabledAll()
+                    responseParameters = null
+                }
+            }
+        }
+    }
+
     // Handler used to do specific action in fact with packet sended to bdo
-    private var handleResponse: Handler? = null
+    @SuppressLint("HandlerLeak")
+    private var handleResponse: Handler? = mainResponseHandler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -180,6 +193,7 @@ class DeviceActivity: AppCompatActivity() {
         }
 
         textView_log.movementMethod = ScrollingMovementMethod()
+        textView_responses.movementMethod = ScrollingMovementMethod()
     }
 
     override fun onDestroy() {
@@ -270,6 +284,14 @@ class DeviceActivity: AppCompatActivity() {
         bluetoothGatt!!.discoverServices()
     }
 
+    private fun setResponseHandler(newHandler: Handler){
+        handleResponse = newHandler
+    }
+
+    private fun resetHandler(){
+        handleResponse = mainResponseHandler
+    }
+
     private fun enabledGattNotification(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic){
         val enabled = true
         val descriptor = characteristic.getDescriptor(characteristic.descriptors[0].uuid)
@@ -300,13 +322,15 @@ class DeviceActivity: AppCompatActivity() {
     private fun sendPacketToBDO(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, packet: ByteArray){
         characteristic.value = packet
         gatt.writeCharacteristic(characteristic)
+        showLog("En attente de réponse ...")
+        disabledAll()
     }
 
     private fun getMenuAttribut(){
         // Store all packets to send
         val queueRequest: MutableList<Pair<DSRCAttribut,ByteArray>> = mutableListOf()
         // Store all packets receive
-        val queueResponse: MutableList<ByteArray> = mutableListOf()
+        var queueResponse: String = ""
         // Store all attributes to get
         val listAttribut: MutableList<DSRCAttribut> = mutableListOf()
         var attribut = DSRCAttributManager.finAttribut(1, 4)
@@ -315,8 +339,6 @@ class DeviceActivity: AppCompatActivity() {
         attribut?.let{listAttribut.add(it)}
         attribut = DSRCAttributManager.finAttribut(1, 24)
         attribut?.let{listAttribut.add(it)}
-
-        Log.d(TAG,"Liste des attributs : $listAttribut")
 
         val handler = @SuppressLint("HandlerLeak")
         object: Handler(){
@@ -333,19 +355,11 @@ class DeviceActivity: AppCompatActivity() {
                     }
                     RECEIVE -> {
                         // Add response
-                        packetResponse?.let { queueResponse.add(it) }
+                        packetResponse?.let { queueResponse += dsrcManager.readResponse(responseParameters!!,it) + "\n"}
                         // Remove first request packet added
-                        val p = queueRequest.removeAt(0)
-                        Log.d(TAG,"Suppression et lecture de l'attribut ${p.first.attrName}")
-
-                        packetResponse?.let {
-                            showLog(dsrcManager.readResponse(responseParameters!!,it))
-                            Log.d(TAG,dsrcManager.readResponse(responseParameters!!,it))
-                        }
-
+                        queueRequest.removeAt(0)
 
                         if(queueRequest.isNotEmpty()){
-                            Log.d(TAG,"Envoie de l'attribut ${queueRequest[0].first.attrName}")
                             sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!,queueRequest[0].second)
                             responseParameters = dsrcManager.readGetAttributPacket(queueRequest[0].first)
                         }
@@ -355,19 +369,20 @@ class DeviceActivity: AppCompatActivity() {
                     }
                     END -> {
                         // TODO change var ect with queueReponse
-                        handleResponse = null
+                        showResponse(queueResponse)
+                        resetHandler()
+                        enabledAll()
                     }
                 }
             }
         }
         // TODO add all packet to queueRequest
-        handleResponse = handler
+        setResponseHandler(handler)
 
         for(attr in listAttribut){
             queueRequest.add(Pair(attr,getPacketGetAttribut(attr)))
         }
 
-        Log.d(TAG,"Envoie de l'attribut ${queueRequest[0].first.attrName}")
         sendPacketToBDO(bluetoothGatt!!,requestCharacteristic!!,queueRequest[0].second)
         responseParameters = dsrcManager.readGetAttributPacket(queueRequest[0].first)
     }
@@ -401,11 +416,8 @@ class DeviceActivity: AppCompatActivity() {
             showLog("Des services ont été découverts")
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 gatt.services.forEach{  gattService ->
-                    //if(ServiceDsrcUtils.isKnowing(gattService.uuid.toString()))
-                    //Log.d(TAG,"Service : ${gattService.uuid}")
                     gattService.characteristics.forEach { gattCharacteristic ->
                         if(ServiceDsrcUtils.isKnowing(gattCharacteristic.uuid.toString())){
-                            //Log.d(TAG,"Characteristic : ${gattCharacteristic.uuid}\nPermissions : ${gattCharacteristic.permissions}\nProperties : ${gattCharacteristic.properties}")
                             when(gattCharacteristic.uuid.toString()){
                                 ServiceDsrcUtils.COMMAND -> {
                                     requestCharacteristic = gattCharacteristic
@@ -453,16 +465,30 @@ class DeviceActivity: AppCompatActivity() {
         ) {
             super.onCharacteristicChanged(gatt, characteristic)
             if(characteristic != null){
-
-                if(handleResponse != null){
-                    handleResponse!!.obtainMessage(RECEIVE,characteristic.value).sendToTarget()
-                }
-                else{
-                    showLog(dsrcManager.readResponse(responseParameters!!,characteristic.value))
-                    responseParameters = null
-                }
+                showLog("Réponse reçu !")
+                handleResponse!!.obtainMessage(RECEIVE,characteristic.value).sendToTarget()
             }
         }
+    }
+
+    private fun disabledAll(){
+        btn_test.isEnabled = false
+        btn_get_attr.isEnabled = false
+        btn_send.isEnabled = false
+        editText_attrID.isEnabled = false
+        editText_EID.isEnabled = false
+    }
+
+    private fun enabledAll(){
+        btn_test.isEnabled = true
+        btn_get_attr.isEnabled = true
+        btn_send.isEnabled = true
+        editText_attrID.isEnabled = true
+        editText_EID.isEnabled = true
+    }
+
+    private fun showResponse(response: String){
+        textView_responses.text = response
     }
 
     private fun showLog(message: String) {
