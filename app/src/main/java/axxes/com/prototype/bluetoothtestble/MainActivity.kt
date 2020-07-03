@@ -147,10 +147,13 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         //Création du callback
         val leScanCallback: BluetoothAdapter.LeScanCallback =
                 BluetoothAdapter.LeScanCallback{ device: BluetoothDevice, rssi: Int, _: ByteArray ->
-                    addDevice(device)
+                    if(device.name != null){
+                        if(device.name.matches(Regex("TA\\w*")))
+                            addDevice(device)
+                    }
         }
         showLog("Lancement du scan en API 18")
-        bluetoothAdapter?.startLeScan(arrayOf(UUID.fromString("db280000-f473-4446-bf88-cc2c09294427")),leScanCallback)
+        bluetoothAdapter?.startLeScan(leScanCallback)
         //Arrêt du scan 5s après
         Handler().postDelayed({
             bluetoothAdapter?.stopLeScan(leScanCallback)

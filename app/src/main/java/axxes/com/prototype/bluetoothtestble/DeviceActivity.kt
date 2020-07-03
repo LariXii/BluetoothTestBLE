@@ -151,8 +151,14 @@ class DeviceActivity: AppCompatActivity() {
         }
 
         btn_get_attr.setOnClickListener {
-            val eid: Int = editText_EID.text.toString().toInt()
-            val attrId: Int = editText_attrID.text.toString().toInt()
+            var eid = -1
+            var attrId = -1
+            if(editText_EID.text.toString().isNotEmpty())
+                eid = editText_EID.text.toString().toInt()
+
+            if(editText_attrID.text.toString().isNotEmpty())
+                attrId = editText_attrID.text.toString().toInt()
+
             val attribut = DSRCAttributManager.finAttribut(eid,attrId)
             if(attribut == null){
                 btn_get_attr.setTextColor(Color.RED)
@@ -443,8 +449,9 @@ class DeviceActivity: AppCompatActivity() {
             status: Int
         ) {
             super.onCharacteristicWrite(gatt, characteristic, status)
+            Log.d(TAG,"Une charactéristique est écrit")
             if (characteristic != null) {
-
+                Log.d(TAG,"Envoi du packet ${DSRCManager.toHexString(characteristic.value)}")
             }
         }
 
@@ -464,14 +471,17 @@ class DeviceActivity: AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic?
         ) {
             super.onCharacteristicChanged(gatt, characteristic)
+            Log.d(TAG,"Une charactéristique est changée")
             if(characteristic != null){
                 showLog("Réponse reçu !")
+                Log.d(TAG,"Réception du packet ${DSRCManager.toHexString(characteristic.value)}")
                 handleResponse!!.obtainMessage(RECEIVE,characteristic.value).sendToTarget()
             }
         }
     }
 
     private fun disabledAll(){
+        Log.d(TAG,"onDisabledAll")
         btn_test.isEnabled = false
         btn_get_attr.isEnabled = false
         btn_send.isEnabled = false
@@ -480,6 +490,7 @@ class DeviceActivity: AppCompatActivity() {
     }
 
     private fun enabledAll(){
+        Log.d(TAG,"onEnabledAll")
         btn_test.isEnabled = true
         btn_get_attr.isEnabled = true
         btn_send.isEnabled = true
