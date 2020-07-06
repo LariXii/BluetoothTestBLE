@@ -302,7 +302,7 @@ class DeviceActivity: AppCompatActivity() {
         val enabled = true
         val descriptor = characteristic.getDescriptor(characteristic.descriptors[0].uuid)
         descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        //gatt.writeDescriptor(descriptor)
+        gatt.writeDescriptor(descriptor)
         gatt.setCharacteristicNotification(characteristic, enabled)
     }
 

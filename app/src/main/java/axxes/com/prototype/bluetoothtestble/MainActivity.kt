@@ -179,13 +179,6 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         //Récupération du scanner
         val bluetoothLeScanner: BluetoothLeScanner? = bluetoothAdapter?.bluetoothLeScanner
         //Début du scan
-        val builderScanFilter = ScanFilter.Builder()
-        builderScanFilter
-            .setDeviceName("TA")
-            //.setServiceUuid(ParcelUuid(UUID.fromString("db280001-f473-4446-bf88-cc2c09294427")))
-        val bScanSettings = ScanSettings.Builder()
-        bScanSettings.setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-        //bluetoothLeScanner?.startScan(mutableListOf(builderScanFilter.build()),bScanSettings.build(),scanCallback)
         bluetoothLeScanner?.startScan(scanCallback)
         showLog("Lancement du scan en API 21")
         //Arrêt du scan 5s plus tard
