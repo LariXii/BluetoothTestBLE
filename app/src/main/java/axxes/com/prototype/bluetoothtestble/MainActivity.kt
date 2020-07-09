@@ -86,20 +86,6 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemClickListener {
         )
     }
 
-    private fun bluetoothPermissionApproved(): Boolean {
-        return PackageManager.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(
-            this,
-            Manifest.permission.BLUETOOTH
-        )
-    }
-
-    private fun bluetoothAdminPermissionApproved(): Boolean {
-        return PackageManager.PERMISSION_GRANTED == ActivityCompat.checkSelfPermission(
-            this,
-            Manifest.permission.BLUETOOTH_ADMIN
-        )
-    }
-
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         if (requestCode != PERMISSION_REQUEST_CODE) return
         var idxPermFine = -1

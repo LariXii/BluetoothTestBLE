@@ -2,6 +2,7 @@ package axxes.com.prototype.bluetoothtestble
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.Dialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.bluetooth.*
@@ -16,6 +17,7 @@ import android.os.Handler
 import android.os.Message
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import com.example.android.whileinuselocation.manager.DSRCAttributManager
@@ -39,13 +41,17 @@ class DeviceActivity: AppCompatActivity() {
     var eventCharacteristic: BluetoothGattCharacteristic? = null
 
     val STATE_CONNECTED = 0
-    val STATE_DISCONNECTED = 1
-    val STATE_SENDABLE = 2
-    val STATE_NOT_SENDABLE = 3
+    val STATE_CONNECTING = 1
+    val STATE_DISCONNECTED = 2
+    val STATE_DISCONNECTING = 3
+    val STATE_SENDABLE = 4
+    val STATE_NOT_SENDABLE = 5
 
     var stateDevice = STATE_DISCONNECTED
 
     var responseParameters: List<Pair<String, Int>>? = null
+
+    lateinit var dialogConnection: Dialog
 
     @SuppressLint("HandlerLeak")
     private val handlerGattState: Handler =
@@ -54,12 +60,19 @@ class DeviceActivity: AppCompatActivity() {
             super.handleMessage(msg)
             when(msg.what){
                 STATE_CONNECTED -> {
+                    stateDevice = STATE_CONNECTED
+                    dialogConnection.hide()
                     btn_send.isEnabled = true
                     textView_state.text = "Connected"
                     textView_state.setTextColor(Color.GREEN)
                     btn_disconnect.text = "Déconnexion"
                 }
+                STATE_CONNECTING -> {
+                    stateDevice = STATE_CONNECTING
+                    dialogConnection.show()
+                }
                 STATE_DISCONNECTED -> {
+                    stateDevice = STATE_DISCONNECTED
                     btn_send.isEnabled = false
                     textView_state.text = "Disconnected"
                     textView_state.setTextColor(Color.RED)
@@ -73,6 +86,16 @@ class DeviceActivity: AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun createConnectionDialog(){
+        val builderDialog = AlertDialog.Builder(this)
+        val inflater = this.layoutInflater
+        val dialogView = inflater.inflate(R.layout.dialog_progressbar, null)
+        builderDialog.setTitle("Chargement")
+            .setView(dialogView)
+            .setCancelable(false)
+        dialogConnection = builderDialog.create()
     }
 
     private val broadCastBluetooth: BroadcastReceiver = object : BroadcastReceiver() {
@@ -200,6 +223,8 @@ class DeviceActivity: AppCompatActivity() {
 
         textView_log.movementMethod = ScrollingMovementMethod()
         textView_responses.movementMethod = ScrollingMovementMethod()
+
+        createConnectionDialog()
     }
 
     override fun onDestroy() {
@@ -268,13 +293,13 @@ class DeviceActivity: AppCompatActivity() {
             return
         }
         bluetoothGatt = device.connectGatt(this, true, bluetoothGattCallback)
-        stateDevice = STATE_CONNECTED
+        handlerGattState.obtainMessage(STATE_CONNECTING).sendToTarget()
     }
 
     private fun disconnectBLE(){
         Log.d(TAG,"onDisconnectBLE")
         bluetoothGatt?.disconnect()
-        stateDevice = STATE_DISCONNECTED
+        handlerGattState.obtainMessage(STATE_DISCONNECTING).sendToTarget()
     }
 
     private fun closeBLE(){

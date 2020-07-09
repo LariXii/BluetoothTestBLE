@@ -36,6 +36,6 @@ class ListAdapter_BLE_Devices(_context: Context,private val _resources: Int, _ob
         } else {
             tv.text = "No Address"
         }
-        return convertView!!
+        return convertView
     }
 }
